@@ -23,7 +23,6 @@ typedef struct SocketTestData
 {
 	DataType	type;
 	byte		buffer[196];
-	bool		bSucceed;
 } SocketTestData, *LPSocketTestData;
 
 typedef struct SocketSpeedData

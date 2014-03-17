@@ -11,9 +11,12 @@
 #endif
 
 static char s_szDisplayList[] = "CatalystMonitorServer.data";
-static char s_szVPPFlag[] = "VPP Display Control Data Base";
+static char s_szVPPFlag[] = "Catalyst Monitor Server";
 static char s_szSettingFormat[] = "XRes: %d, YRes: %d, Color: %d, RefreshRate: %f, Brightness: %d, Contrast: %d, Saturation: %d, Hue: %d, Temperature: %d, Rate: %d";
-static char s_szServiceLog[] = "VPPDisplayService.log";
+static char s_szServiceLog[] = "CatalystMonitorService.log";
+
+void ThreadReceiveSendData(LPVOID param);
+void ThreadSOCKETSpeedTest(LPVOID param);
 
 // CAboutDlg dialog used for App About
 
@@ -47,10 +50,6 @@ END_MESSAGE_MAP()
 
 
 // CCatalystMonitorServerDlg dialog
-
-
-
-
 CCatalystMonitorServerDlg::CCatalystMonitorServerDlg(CWnd* pParent /*=NULL*/)
 	: CDialog(CCatalystMonitorServerDlg::IDD, pParent)
 {
@@ -63,7 +62,6 @@ CCatalystMonitorServerDlg::CCatalystMonitorServerDlg(CWnd* pParent /*=NULL*/)
 CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
 {
 	closesocket(m_socketServer);
-	ClearDisplayList();
 	WSACleanup();
 }
 
@@ -232,114 +230,6 @@ void CCatalystMonitorServerDlg::UpdateLocalHostIP()
 	}
 }
 
-void ReceiveSendData(LPVOID param)
-{
-	CCatalystMonitorServerDlg* displayServer = static_cast<CCatalystMonitorServerDlg*>(param);
-
-	while(displayServer)
-	{
-		if (displayServer->m_bTerminateThread)
-			return;
-
-		SOCKET clientSocket = NULL;
-		if (displayServer->CreateClientSocket(clientSocket) == false) // nonblocking socket here, otherwise waiting until a connection is created
-		{
-			Sleep(500);
-			continue;
-		}
-		Sleep(200); // Wait for Client's sending, specially for nonblocking socket
-
-		int bytes = 0;
-		char buf[BUFFERLENGTH] = "";
-		if((bytes = recv(clientSocket, buf, sizeof(buf) ,0)) != SOCKET_ERROR)
-		{
-			buf[bytes] = '\0';
-			SocketDataSend data = {};
-			memcpy(&data, buf, min(sizeof(data), bytes));
-			if (data.type == DataType::ClientSetting) // client current setting
-			{
-				if (displayServer->AddOneSetting(data))
-    				displayServer->RecordService(data);
-
-				data.type = DataType::ServerReceive;
-				send(clientSocket, (char*)&data, sizeof(data), 0);
-			}
-			else if (data.type == DataType::test)
-			{
-				send(clientSocket, (char*)&data, sizeof(data), 0);
-			}
-		}
-		closesocket(clientSocket);
-	}
-}
-
-void SOCKETSpeedTest(LPVOID param)
-{
-	CCatalystMonitorServerDlg* displayServer = static_cast<CCatalystMonitorServerDlg*>(param);
-
-	while(displayServer)
-	{
-		if (displayServer->m_bTerminateThread)
-			return;
-
-		SOCKET clientSocket = NULL;
-		if (displayServer->CreateClientSocket(clientSocket) == false) // nonblocking socket here, otherwise waiting until a connection is created
-		{
-			Sleep(500);
-			continue;
-		}
-	//	Sleep(200); // Wait for Client's sending, specially for nonblocking socket
-
-        double time;
-        LARGE_INTEGER liOld, liNew, liFreq;
-        QueryPerformanceCounter(&liOld);
-        
-        int nCount = 0;
-        int nFail = 0;
-        while (!displayServer->m_bTerminateThread)
-        {
-		    int bytes = 0;
-		    char buf[10241] = "";
-		    if((bytes = recv(clientSocket, buf, sizeof(buf)-1 ,0)) != SOCKET_ERROR)
-		    {
-                nCount += bytes;
-
-			    buf[bytes] = '\0';
-			    SocketDataSend data = {};
-			    //memcpy(&data, buf, min(sizeof(data), bytes));
-
-                if (data.type == DataType::test)
-			    {
-				    send(clientSocket, (char*)&data, sizeof(data), 0);
-			    }			    
-                else if (data.type == DataType::speedTest)
-			    {
-				    //send(clientSocket, (char*)&data, sizeof(data), 0);
-			    }
-		    }
-            else
-            {
-                //WSAGetLastError();
-                nFail++;
-
-                if (nCount >= 200000000)
-                {
-                    QueryPerformanceCounter(&liNew);
-                    QueryPerformanceFrequency(&liFreq);
-                    time = (liNew.QuadPart - liOld.QuadPart)/(double)(liFreq.QuadPart);
-
-                    char szOutput[256];
-                    sprintf(szOutput, "received data length=%d, time=%f, speed=%fMB/s\n", nCount, time, nCount/time/1000000);
-                    OutputDebugString(szOutput);
-                    break;
-                }
-            }
-        }
-
-		closesocket(clientSocket);
-	}
-}
-
 void CCatalystMonitorServerDlg::OnBnClickedButtonService()
 {
 	if (InitializeService() == false)
@@ -354,9 +244,9 @@ void CCatalystMonitorServerDlg::OnBnClickedButtonService()
 		pPort->EnableWindow(FALSE);
 
 #ifdef SOCKETSPEEDTEST
-	m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)SOCKETSpeedTest, (LPVOID)this, 0, NULL);
+	m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadSOCKETSpeedTest, (LPVOID)this, 0, NULL);
 #else
-	m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ReceiveSendData, (LPVOID)this, 0, NULL);
+	m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadReceiveSendData, (LPVOID)this, 0, NULL);
 #endif
 }
 
@@ -393,6 +283,120 @@ bool CCatalystMonitorServerDlg::InitializeService()
 	return true;
 }
 
+void ThreadReceiveSendData(LPVOID param)
+{
+	CCatalystMonitorServerDlg* displayServer = static_cast<CCatalystMonitorServerDlg*>(param);
+
+	while(displayServer)
+	{
+		if (displayServer->m_bTerminateThread)
+			return;
+
+		SOCKET clientSocket = NULL;
+		if (displayServer->CreateClientSocket(clientSocket) == false) // nonblocking socket here, otherwise waiting until a connection is created
+		{
+			Sleep(500);
+			continue;
+		}
+		Sleep(200); // Wait for Client's sending, specially for nonblocking socket
+
+		int bytes = 0;
+		char buf[BUFFERLENGTH] = "";
+		if((bytes = recv(clientSocket, buf, sizeof(buf) ,0)) != SOCKET_ERROR)
+		{
+			buf[bytes] = '\0';
+			if (bytes < sizeof(SocketFeatureData)) // connection test
+			{
+				SocketTestData data = {};
+				memcpy(&data, buf, min(sizeof(data), bytes));
+				if (data.type == DataType::test)
+					send(clientSocket, (char*)&data, sizeof(data), 0);
+			}
+			else
+			{
+				SocketFeatureData data = {};
+				memcpy(&data, buf, min(sizeof(data), bytes));
+				if (data.type == DataType::ClientSetting) // client current setting
+				{
+					if (displayServer->AddOneSetting(data))
+    					displayServer->RecordService(data);
+
+					data.type = DataType::ServerReceived;
+					send(clientSocket, (char*)&data, sizeof(data), 0);
+				}
+			}
+		}
+		closesocket(clientSocket);
+	}
+}
+
+void ThreadSOCKETSpeedTest(LPVOID param)
+{
+	CCatalystMonitorServerDlg* displayServer = static_cast<CCatalystMonitorServerDlg*>(param);
+
+	while(displayServer)
+	{
+		if (displayServer->m_bTerminateThread)
+			return;
+
+		SOCKET clientSocket = NULL;
+		if (displayServer->CreateClientSocket(clientSocket) == false) // nonblocking socket here, otherwise waiting until a connection is created
+		{
+			Sleep(500);
+			continue;
+		}
+	//	Sleep(200); // Wait for Client's sending, specially for nonblocking socket
+
+        double time;
+        LARGE_INTEGER liOld, liNew, liFreq;
+        QueryPerformanceCounter(&liOld);
+        
+        int nCount = 0;
+        int nFail = 0;
+        while (!displayServer->m_bTerminateThread)
+        {
+		    int bytes = 0;
+		    char buf[10241] = "";
+		    if((bytes = recv(clientSocket, buf, sizeof(buf)-1 ,0)) != SOCKET_ERROR)
+		    {
+                nCount += bytes;
+
+			    buf[bytes] = '\0';
+			    SocketTestData data = {};
+			    //memcpy(&data, buf, min(sizeof(data), bytes));
+
+                if (data.type == DataType::test)
+			    {
+				    send(clientSocket, (char*)&data, sizeof(data), 0);
+			    }			    
+                else if (data.type == DataType::speedTest)
+			    {
+				    //send(clientSocket, (char*)&data, sizeof(data), 0);
+			    }
+		    }
+            else
+            {
+                //WSAGetLastError();
+                nFail++;
+
+                if (nCount >= 200000000)
+                {
+                    QueryPerformanceCounter(&liNew);
+                    QueryPerformanceFrequency(&liFreq);
+                    time = (liNew.QuadPart - liOld.QuadPart)/(double)(liFreq.QuadPart);
+
+                    char szOutput[256];
+                    sprintf(szOutput, "received data length=%d, time=%f, speed=%fMB/s\n", nCount, time, nCount/time/1000000);
+                    OutputDebugString(szOutput);
+                    break;
+                }
+            }
+        }
+
+		closesocket(clientSocket);
+	}
+}
+
 bool CCatalystMonitorServerDlg::CreateClientSocket(SOCKET& clientSocket)
 {
 	sockaddr_in clientAddress;
@@ -422,7 +426,7 @@ void CCatalystMonitorServerDlg::OnBnClickedButtonClose()
 	OnOK();
 }
 
-bool CCatalystMonitorServerDlg::AddOneSetting(SocketDataSend socketData)
+bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
 {
 
 	return true;
@@ -430,9 +434,6 @@ bool CCatalystMonitorServerDlg::AddOneSetting(SocketDataSend socketData)
 
 bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
 {
-	if (m_displayList.size() <= 0)
-		return false;
-
 	CString strFile = GetModulePath();
 	strFile.Append(s_szDisplayList);
 	FILE* file = fopen(strFile, "w");
@@ -493,115 +494,26 @@ bool CCatalystMonitorServerDlg::LoadDisplayListFromFile()
 		return false;
 	}
 
-	ClearDisplayList();
-
-	bool bFirstDisplay = true;
-	bool bFirstAdapter = true;
-	strDisplay display = {};
-	strAdapter adapter = {};
-
 	char szTemp[256] = "";
 	while (fgets(szTemp, sizeof(szTemp), file) != NULL)
 	{
 		if (strstr(szTemp, "Display: ") == szTemp)
 		{
-			if (!bFirstDisplay) // push_back the previous one to list
-			{
-                display.adapterList.push_back(adapter);
-				ClearOneAdapter(adapter);
-				m_displayList.push_back(display);
-				ClearOneDisplay(display);
-			}
-			bFirstDisplay = false;
-			bFirstAdapter = true;
-			strcpy(display.szDisplay, szTemp+9);
-			display.szDisplay[strlen(display.szDisplay)-1] = '\0';
+
 		}
 		else if (strstr(szTemp, "Adapter: ") == szTemp)
 		{
-			if (!bFirstAdapter) // push_back the previous one to list
-			{
-				display.adapterList.push_back(adapter);
-				ClearOneAdapter(adapter);
-			}
-			bFirstAdapter = false;
-			strcpy(adapter.szAdapter, szTemp+9);
-			adapter.szAdapter[strlen(adapter.szAdapter)-1] = '\0';
+
 		}
-		else if (strstr(szTemp, "XRes: ") == szTemp)
-		{
-			char szFormat[256] = "";
-			sprintf(szFormat, "%s\n", s_szSettingFormat);
-			DisplaySetting displaySetting = {};
-			sscanf(szTemp, szFormat, &displaySetting.nXResolution, &displaySetting.nYResolution, &displaySetting.nColourDepth, &displaySetting.fRefreshRate, 
-                &displaySetting.nBrightness, &displaySetting.nContrast, &displaySetting.nSaturation, &displaySetting.nHue, &displaySetting.nTemperature, &displaySetting.rate);
-
-	        char szGamma[2048] = "";
-            for (int i=0; i<3; i++)
-            {
-    	        fgets(szGamma, 2048, file);
-
-                if (strstr(szGamma, "    GammaR: ") == szGamma)
-                {
-                    sscanf(szGamma, "    GammaR: %d", &displaySetting.wGamma[0][0]);
-                    char* pNumber = szGamma + 9;
-                    for (int i=1; i<256; i++)
-                    {
-                        pNumber = strstr(pNumber, ",");
-                        pNumber++;
-                        displaySetting.wGamma[0][i] = atoi(pNumber);
-                    }
-                }
-                else if (strstr(szGamma, "    GammaG: ") == szGamma)
-                {
-                    sscanf(szGamma, "    GammaG: %d", &displaySetting.wGamma[1][0]);
-                    char* pNumber = szGamma + 9;
-                    for (int i=1; i<256; i++)
-                    {
-                        pNumber = strstr(pNumber, ",");
-                        pNumber++;
-                        displaySetting.wGamma[1][i] = atoi(pNumber);
-                    }
-                }
-                else if (strstr(szGamma, "    GammaB: ") == szGamma)
-                {
-                    sscanf(szGamma, "    GammaB: %d", &displaySetting.wGamma[2][0]);
-                    char* pNumber = szGamma + 9;
-                    for (int i=1; i<256; i++)
-                    {
-                        pNumber = strstr(pNumber, ",");
-                        pNumber++;
-                        displaySetting.wGamma[2][i] = atoi(pNumber);
-                    }
-                }
-                else // if Gamma data not exist
-                {
-                    int nRead = strlen(szGamma);
-                    fseek(file, -1-nRead, SEEK_CUR);
-                    break;
-                }
-            }
-
-			if (displaySetting.nXResolution && displaySetting.nYResolution)
-				adapter.settingList.push_back(displaySetting);
-		}
+		
 		memset(szTemp, 0, sizeof(szTemp));
 	}
-	display.adapterList.push_back(adapter); // push_back last one
-	m_displayList.push_back(display); // push_back last one
 
 	fclose(file);
 	return true;
 }
 
-void CCatalystMonitorServerDlg::ClearDisplayList()
-{
-	for (DisplayList::iterator itDisplay = m_displayList.begin(); itDisplay != m_displayList.end(); ++itDisplay)
-		ClearOneDisplay(*itDisplay);
-
-	m_displayList.clear();
-}
-
+/*
 void CCatalystMonitorServerDlg::ClearOneDisplay(strDisplay& display)
 {
 	memset(display.szDisplay, 0, sizeof(display.szDisplay));
@@ -615,9 +527,9 @@ void CCatalystMonitorServerDlg::ClearOneAdapter(strAdapter& adapter)
 {
 	memset(adapter.szAdapter, 0, sizeof(adapter.szAdapter));
 	adapter.settingList.clear();
-}
+}*/
 
-bool CCatalystMonitorServerDlg::RecordService(SocketDataSend& socketData)
+bool CCatalystMonitorServerDlg::RecordService(SocketFeatureData& socketData)
 {
 	CString strFile = GetModulePath();
 	strFile.Append(s_szServiceLog);
@@ -629,53 +541,15 @@ bool CCatalystMonitorServerDlg::RecordService(SocketDataSend& socketData)
 	GetLocalTime(&time);
 	fprintf(file, "[ %4.4d_%2.2d_%2.2d-%2.2d_%2.2d_%2.2d ] ", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute, time.wSecond);
 
-	if(socketData.type == DataType::ClientAskFor)
+	if (socketData.type == DataType::ClientSetting)
 	{
-		fprintf(file, "[Client Name:%s, Display: %s, Adapter: %s] Client asks for advice\n", socketData.szHostName, socketData.szDisplay, socketData.szAdapter);
-	}
-	else if (socketData.type == DataType::ServerAdvice)
-	{
-		fprintf(file, "[Client Name:%s, Display: %s, Adapter: %s] Server gives advice to client\n", socketData.szHostName, socketData.szDisplay, socketData.szAdapter);
-		fprintf(file, "\t\t\txRes = %d, yRes = %d, color depth = %d, refresh rate = %f, brightness = %d, contrast = %d, saturation = %d, hue = %d, temperature = %d\n", 
-            socketData.displaySetting.nXResolution, socketData.displaySetting.nYResolution, socketData.displaySetting.nColourDepth, socketData.displaySetting.fRefreshRate,
-            socketData.displaySetting.nBrightness, socketData.displaySetting.nContrast, socketData.displaySetting.nSaturation, socketData.displaySetting.nHue, socketData.displaySetting.nTemperature);
-		
-        fprintf(file, "\t\t\tGammaR = %d", socketData.displaySetting.wGamma[0][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[0][i]);
-        fprintf(file, "\n");
-        fprintf(file, "\t\t\tGammaG = %d", socketData.displaySetting.wGamma[1][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[1][i]);
-        fprintf(file, "\n");
-        fprintf(file, "\t\t\tGammaB = %d", socketData.displaySetting.wGamma[2][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[2][i]);
-        fprintf(file, "\n");
-	}
-	else if (socketData.type == DataType::ClientSetting)
-	{
-		fprintf(file, "[Client Name:%s, Display: %s, Adapter: %s] Client sends current setting to server\n", socketData.szHostName, socketData.szDisplay, socketData.szAdapter);
-		fprintf(file, "\t\t\txRes = %d, yRes = %d, color depth = %d, refresh rate = %f, brightness = %d, contrast = %d, saturation = %d, hue = %d, temperature = %d\n", 
-            socketData.displaySetting.nXResolution, socketData.displaySetting.nYResolution, socketData.displaySetting.nColourDepth, socketData.displaySetting.fRefreshRate,
-            socketData.displaySetting.nBrightness, socketData.displaySetting.nContrast, socketData.displaySetting.nSaturation, socketData.displaySetting.nHue, socketData.displaySetting.nTemperature);
-	
-        fprintf(file, "\t\t\tGammaR = %d", socketData.displaySetting.wGamma[0][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[0][i]);
-        fprintf(file, "\n");
-        fprintf(file, "\t\t\tGammaG = %d", socketData.displaySetting.wGamma[1][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[1][i]);
-        fprintf(file, "\n");
-        fprintf(file, "\t\t\tGammaB = %d", socketData.displaySetting.wGamma[2][0]);
-        for (int i=1; i<256; i++)
-            fprintf(file, ",%d", socketData.displaySetting.wGamma[2][i]);
+		fprintf(file, "[Client Name:%s] Client sends current setting to server\n", socketData.szHostName);
+
         fprintf(file, "\n");
     }
-	else if (socketData.type == DataType::ServerReceive)
+	else if (socketData.type == DataType::ServerReceived)
 	{
-		fprintf(file, "[Client Name:%s, Display: %s, Adapter: %s] Server receives client's setting\n", socketData.szHostName, socketData.szDisplay, socketData.szAdapter);
+		fprintf(file, "[Client Name:%s] Server receives client's setting\n", socketData.szHostName);
 	}
 
     fprintf(file, "\n");

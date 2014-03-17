@@ -17,6 +17,7 @@ static char s_szIniFile[] = "CatalystMonitorClient.ini";
 static char s_szVPPClientFlag[] = "Catalyst Monitor Client";
 
 void ThreadDetectCatalystSettingChange(LPVOID param);
+void ThreadSOCKETSpeedTest(LPVOID param);
 
 // CAboutDlg dialog used for App About
 class CAboutDlg : public CDialog
@@ -274,7 +275,7 @@ void CCatalystMonitorClientDlg::OnBnClickedButtonConnect()
 	m_nPort = nPort;
 
 #ifdef SOCKETSPEEDTEST
-    m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)SOCKETSpeedTest, (LPVOID)this, 0, NULL);
+    m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadSOCKETSpeedTest, (LPVOID)this, 0, NULL);
 #else
     if (ConnectionTest(true))
     {
@@ -524,7 +525,7 @@ bool CCatalystMonitorClientDlg::SendCatalystSetting()
 	return m_bConnected;
 }
 
-void SOCKETSpeedTest(LPVOID param)
+void ThreadSOCKETSpeedTest(LPVOID param)
 {
 	CCatalystMonitorClientDlg* displayClient = static_cast<CCatalystMonitorClientDlg*>(param); 
 	if (displayClient)

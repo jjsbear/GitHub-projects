@@ -25,36 +25,18 @@ public:
 public:
 	bool m_bTerminateThread;
 	bool CreateClientSocket(SOCKET& clientSocket);
-	bool AddOneSetting(SocketDataSend socketData);
-	bool RecordService(SocketDataSend& socketData);
+	bool AddOneSetting(SocketFeatureData socketData);
+	bool RecordService(SocketFeatureData& socketData);
 
 private:
 	HANDLE m_hThread;
 	SOCKET m_socketServer;
-
-	typedef std::vector<DisplaySetting> SettingList;
-	typedef struct strAdapter
-	{
-		SettingList settingList;
-		char szAdapter[256];
-	};
-	typedef std::vector<strAdapter> AdapterList;
-	typedef struct strDisplay
-	{
-		AdapterList adapterList;
-		char szDisplay[256];
-	};
-	typedef std::vector<strDisplay> DisplayList;
-	DisplayList m_displayList;
 
 	void CreateServerSocket();
 	bool InitializeService();
 	void UpdateLocalHostIP();
 	bool SaveDisplayListToFile();
 	bool LoadDisplayListFromFile();
-	void ClearDisplayList();
-	void ClearOneDisplay(strDisplay& display);
-	void ClearOneAdapter(strAdapter& adapter);
 	CString GetModulePath();
 
 protected:
