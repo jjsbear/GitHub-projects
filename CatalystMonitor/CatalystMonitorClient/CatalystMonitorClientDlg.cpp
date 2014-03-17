@@ -7,7 +7,6 @@
 #include "CatalystMonitorClientDlg.h"
 #include "..\\include\\ADLMultiMedia.h"
 #include "..\\include\\socket.h"
-#include "vector"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -15,12 +14,11 @@
 
 static ADLMultiMedia s_ADLMultiMedia;
 static char s_szIniFile[] = "CatalystMonitorClient.ini";
-static char s_szVPPClientFlag[] = "VPP Display Control Client";
+static char s_szVPPClientFlag[] = "Catalyst Monitor Client";
 
-void DetectDisplaySettingChange(LPVOID param);
+void ThreadDetectCatalystSettingChange(LPVOID param);
 
 // CAboutDlg dialog used for App About
-
 class CAboutDlg : public CDialog
 {
 public:
@@ -51,10 +49,6 @@ END_MESSAGE_MAP()
 
 
 // CCatalystMonitorClientDlg dialog
-
-
-
-
 CCatalystMonitorClientDlg::CCatalystMonitorClientDlg(CWnd* pParent /*=NULL*/)
 	: CDialog(CCatalystMonitorClientDlg::IDD, pParent)
 {
@@ -285,7 +279,8 @@ void CCatalystMonitorClientDlg::OnBnClickedButtonConnect()
     if (ConnectionTest(true))
     {
 	    if (m_hThread == NULL)
-		    m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)DetectDisplaySettingChange, (LPVOID)this, 0, NULL);
+		    m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadDetectCatalystSettingChange, (LPVOID)this, 0, NULL);
+		SaveAllSettings();
     }
     else
     {
@@ -294,11 +289,11 @@ void CCatalystMonitorClientDlg::OnBnClickedButtonConnect()
 #endif
 }
 
-void DetectDisplaySettingChange(LPVOID param)
+void ThreadDetectCatalystSettingChange(LPVOID param)
 {
-	const int nInterval = 2000;
-	int nCountToSend = 60000 / nInterval; // 60 000: 1 minutes, 600 000: 10 minutes, time to send current setting to server
-	int nCount = 1; // 0:find new setting, 0x0FFFFFFF:maximum loop number
+	const int nInterval = 2000; // milliseconds
+	int nIntervalBetweenChanges = 60000 / nInterval; // 60 000: 1 minutes, 600 000: 10 minutes, time to send current setting to server
+	int nCount = 0;
 
 	CCatalystMonitorClientDlg* displayClient = static_cast<CCatalystMonitorClientDlg*>(param); 
 	while (displayClient)
@@ -308,88 +303,119 @@ void DetectDisplaySettingChange(LPVOID param)
 
         if(displayClient->ConnectionTest(false) == false) // if disconnected to server
         {
-			nCount = 1;
             displayClient->EnableDlgItem(TRUE);
         }
         else
         {
             displayClient->EnableDlgItem(FALSE);
 
-		    if(displayClient->DetectSettingChange()) // Detect out adapter, display or driver update
-			    nCount = 0;
+		    if(displayClient->DetectSettingChange()) // Detect out Catalyst change
+			{
+				if (nCount > nIntervalBetweenChanges) // Client sends current setting to server if interval between two changes exceed nIntervalBetweenChanges
+				{
+					displayClient->ParseSettingChange();
+					displayClient->SendCatalystSetting();
+					nCount = 0;
+				}
+				else
+					nCount ++;
+			}
             else
                 nCount ++;
 
-		    if (nCount == nCountToSend) // After waiting enough time, client sends current setting to server
-			    displayClient->SendCatalystSetting();
-
 		    if (nCount >= 0x0FFFFFFF) // Dead loop in (nCountToSend+1, 0x0FFFFFFF) if there's not change on client
-			    nCount = 1;
+			    nCount = 0;
         }
 
 		Sleep(nInterval);
 	}
 }
 
-void SOCKETSpeedTest(LPVOID param)
+bool CCatalystMonitorClientDlg::ConnectionTest(bool bMainThread)
 {
-	CCatalystMonitorClientDlg* displayClient = static_cast<CCatalystMonitorClientDlg*>(param); 
-	if (displayClient)
-	{
-		if (displayClient->m_bTerminateThread)
-			return;
-
-     //   displayClient->EnableDlgItem(FALSE);
-        displayClient->SocketSpeedTest();
-     //   displayClient->EnableDlgItem(TRUE);
+    if (bMainThread == false)
+    {
+        if (m_bConnected == false)
+            return false;
+    }
+    
+	SOCKET socketTemp;
+	if((socketTemp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+	{ 
+		AfxMessageBox("Socket creation failed!", MB_ICONERROR);
+        m_bConnected = false;
+		return false;  
 	}
-}
 
-void CCatalystMonitorClientDlg::EnableDlgItem(BOOL bEnable)
-{
-	CWnd* pServer = GetDlgItem(IDC_EDIT_Server);
-	CWnd* pIP = GetDlgItem(IDC_EDIT_IP);
-	CWnd* pPort = GetDlgItem(IDC_EDIT_Port);
-	CWnd* pRadioServer = GetDlgItem(IDC_RADIO_Server);
-	CWnd* pRadioIP = GetDlgItem(IDC_RADIO_IP);
-	CWnd* pConnect = GetDlgItem(IDC_BUTTON_Connect);
-	if (pServer==NULL || pIP==NULL || pPort==NULL || pRadioServer==NULL || pRadioIP==NULL || pConnect==NULL)
-		return;
-
-	if (bEnable)
+	sockaddr_in serverAddress;
+	memset(&serverAddress,0, sizeof(sockaddr_in));
+	serverAddress.sin_family=AF_INET;
+	serverAddress.sin_addr.S_un.S_addr = m_nIP;
+	serverAddress.sin_port = htons(m_nPort);
+	if(connect(socketTemp, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) // Wait until Server is up or time out
 	{
-        if (this->IsWindowVisible() == FALSE)
-        {
-            this->ShowWindow(SW_SHOWNORMAL);
-            this->SetForegroundWindow();
-        }
+        m_bConnected = false;
+		closesocket( socketTemp);
+		return false;
+	}
 
-        int	nSelect = GetCheckedRadioButton(IDC_RADIO_Server, IDC_RADIO_IP);
-		if (nSelect == IDC_RADIO_Server)
-		{
-			pServer->EnableWindow(TRUE);
-			pIP->EnableWindow(FALSE);
-		}
-		else
-		{
-			pServer->EnableWindow(FALSE);
-			pIP->EnableWindow(TRUE);
-		}
+	SocketTestData data = {};
+	data.type = DataType::test;
+	if(send(socketTemp, (char*)&data, sizeof(data), 0) == SOCKET_ERROR)
+	{
+        m_bConnected = false;
+		closesocket( socketTemp);
+		return false;
+	}
+
+	int bytes = 0;
+	char buf[BUFFERLENGTH] = "";
+	if((bytes = recv(socketTemp, buf, sizeof(buf), 0)) == SOCKET_ERROR)
+	{
+        m_bConnected = false;
+		closesocket( socketTemp);
+		return false;
 	}
 	else
-	{
-    //    this->ShowWindow(SW_HIDE);
-		pServer->EnableWindow(FALSE);
-		pIP->EnableWindow(FALSE);
-	}
+		closesocket( socketTemp);
 
-	pRadioServer->EnableWindow(bEnable);
-	pRadioIP->EnableWindow(bEnable);
-	pPort->EnableWindow(bEnable);
-	pConnect->EnableWindow(bEnable);
+	buf[bytes] = '\0';
+	memset(&data, 0, sizeof(data));
+	memcpy(&data, buf, min(sizeof(data), bytes));
+	if (data.type == DataType::test)
+        m_bConnected = true;
+    else
+        m_bConnected = false;
+
+    return m_bConnected;
 }
 
 bool CCatalystMonitorClientDlg::DetectSettingChange()
+{
+    int nFeatureCount = 0;
+    LPADLFeatureValues lpFeatureValues = NULL;    
+    
+	bool ADL_Err = s_ADLMultiMedia.ADLFeatureValuesGet(0, lpFeatureValues, &nFeatureCount);
+	if (lpFeatureValues==NULL)
+		return false;
+    
+	assert(m_nFeatureCount == nFeatureCount);
+    if (m_lpFeatureValues == NULL) // first detect
+    {
+        m_lpFeatureValues = lpFeatureValues;
+        lpFeatureValues = NULL;
+        m_nFeatureCount = nFeatureCount;
+        return false;
+    }
+
+	if (memcmp(m_lpFeatureValues, lpFeatureValues, sizeof(ADLFeatureValues)*m_nFeatureCount) == 0) // no change at all
+        return false;
+
+	ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
+	return true;
+}
+
+bool CCatalystMonitorClientDlg::ParseSettingChange()
 {
     int nFeatureCount = 0;
     LPADLFeatureCaps lpFeatureCaps = NULL;
@@ -403,22 +429,10 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
         ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
 		return false;
     }
-
-    if (m_lpFeatureValues == NULL)
-    {
-        ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
-        m_lpFeatureValues = lpFeatureValues;
-        lpFeatureValues = NULL;
-        m_nFeatureCount = nFeatureCount;
-        return false;
-    }
     
-    assert(m_nFeatureCount == nFeatureCount);
-    
-    if (memcmp(m_lpFeatureValues, lpFeatureValues, sizeof(ADLFeatureValues)*m_nFeatureCount) == 0) // no change at all
-        return false;
+	assert(m_nFeatureCount == nFeatureCount);
 
-    memset(&m_socketData, 0, sizeof(SocketDataSend));
+    memset(&m_socketData, 0, sizeof(SocketFeatureData));
     gethostname(m_socketData.szHostName, sizeof(m_socketData.szHostName));
 
     for (int i=0; i<m_nFeatureCount; i++)
@@ -456,24 +470,22 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
         else // not supported on this adapter
             m_socketData.featureChanges[i].bChanged = -1;
 	}
-
+    
+    ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
+	ADLMultiMedia::ADL_Main_Memory_Free((void**)&m_lpFeatureValues);
     m_lpFeatureValues = lpFeatureValues;
     lpFeatureValues = NULL;
-    ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
 	
 	return true;
 }
 
-bool CCatalystMonitorClientDlg::ConnectionTest(bool bMainThread)
+bool CCatalystMonitorClientDlg::SendCatalystSetting()
 {
-    if (bMainThread == false)
-    {
-        if (m_bConnected == false)
-            return false;
-    }
-    
+	if (m_bConnected == false)
+		return false;
+
 	SOCKET socketTemp;
-	if((socketTemp = socket(AF_INET,SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+	if((socketTemp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
 	{ 
 		AfxMessageBox("Socket creation failed!", MB_ICONERROR);
         m_bConnected = false;
@@ -485,48 +497,51 @@ bool CCatalystMonitorClientDlg::ConnectionTest(bool bMainThread)
 	serverAddress.sin_family=AF_INET;
 	serverAddress.sin_addr.S_un.S_addr = m_nIP;
 	serverAddress.sin_port = htons(m_nPort);
-	if(connect(socketTemp, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) // Wait until Server is up or time out
+
+	bool bSent = false;
+	if(connect(socketTemp, (sockaddr*)&serverAddress, sizeof(serverAddress)) != SOCKET_ERROR) // Wait until Server is up or time out
 	{
-        m_bConnected = false;
-		closesocket( socketTemp);
-		return false;
+		SocketFeatureData data = m_socketData;
+		data.type = DataType::ClientSetting;
+		if(send(socketTemp, (char*)&data, sizeof(data), 0) != SOCKET_ERROR)	// Once connection is created, client needs to send() ASAP as server socket is nonblocking
+		{
+			int bytes = 0;
+			char buf[BUFFERLENGTH] = "";
+			if((bytes = recv(socketTemp, buf, sizeof(buf), 0)) != SOCKET_ERROR)
+			{
+				buf[bytes]='\0';
+
+				memset(&data, 0, sizeof(data));
+				memcpy(&data, buf, min(sizeof(data), bytes));
+				if (data.type == DataType::ServerReceived)
+					bSent = true;
+			}
+		}
 	}
 
-	SocketDataSend data = {};
-	data.type = DataType::test;
-	if(send(socketTemp, (char*)&data, sizeof(data), 0) == SOCKET_ERROR)
+	closesocket( socketTemp);
+	m_bConnected = bSent;
+	return m_bConnected;
+}
+
+void SOCKETSpeedTest(LPVOID param)
+{
+	CCatalystMonitorClientDlg* displayClient = static_cast<CCatalystMonitorClientDlg*>(param); 
+	if (displayClient)
 	{
-        m_bConnected = false;
-		closesocket( socketTemp);
-		return false;
+		if (displayClient->m_bTerminateThread)
+			return;
+
+     //   displayClient->EnableDlgItem(FALSE);
+        displayClient->SocketSpeedTest();
+     //   displayClient->EnableDlgItem(TRUE);
 	}
-
-	int bytes = 0;
-	char buf[BUFFERLENGTH] = "";
-	if((bytes = recv(socketTemp, buf, sizeof(buf), 0)) == SOCKET_ERROR)
-	{
-        m_bConnected = false;
-		closesocket( socketTemp);
-		return false;
-	}
-	else
-		closesocket( socketTemp);
-
-	buf[bytes] = '\0';
-	memset(&data, 0, sizeof(data));
-	memcpy(&data, buf, min(sizeof(data), bytes));
-	if (data.type == DataType::test)
-        m_bConnected = true;
-    else
-        m_bConnected = false;
-
-    return m_bConnected;
 }
 
 bool CCatalystMonitorClientDlg::SocketSpeedTest()
 {
 	SOCKET socketTemp;
-	if((socketTemp = socket(AF_INET,SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+	if((socketTemp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
 	{ 
 		AfxMessageBox("Socket creation failed!", MB_ICONERROR);
 		return false;  
@@ -589,51 +604,48 @@ bool CCatalystMonitorClientDlg::SocketSpeedTest()
     return true;
 }
 
-bool CCatalystMonitorClientDlg::SendCatalystSetting()
+void CCatalystMonitorClientDlg::EnableDlgItem(BOOL bEnable)
 {
-	if (m_bConnected == false)
-		return false;
+	CWnd* pServer = GetDlgItem(IDC_EDIT_Server);
+	CWnd* pIP = GetDlgItem(IDC_EDIT_IP);
+	CWnd* pPort = GetDlgItem(IDC_EDIT_Port);
+	CWnd* pRadioServer = GetDlgItem(IDC_RADIO_Server);
+	CWnd* pRadioIP = GetDlgItem(IDC_RADIO_IP);
+	CWnd* pConnect = GetDlgItem(IDC_BUTTON_Connect);
+	if (pServer==NULL || pIP==NULL || pPort==NULL || pRadioServer==NULL || pRadioIP==NULL || pConnect==NULL)
+		return;
 
-	SOCKET socketTemp;
-	if((socketTemp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
-	{ 
-		AfxMessageBox("Socket creation failed!", MB_ICONERROR);
-        m_bConnected = false;
-		return false;  
-	}
-
-	sockaddr_in serverAddress;
-	memset(&serverAddress,0, sizeof(sockaddr_in));
-	serverAddress.sin_family=AF_INET;
-	serverAddress.sin_addr.S_un.S_addr = m_nIP;
-	serverAddress.sin_port = htons(m_nPort);
-
-	bool bSent = false;
-	if(connect(socketTemp, (sockaddr*)&serverAddress, sizeof(serverAddress)) != SOCKET_ERROR) // Wait until Server is up or time out
+	if (bEnable)
 	{
-		SocketDataSend data = m_socketData;
-		data.type = DataType::ClientSetting;
-		if(send(socketTemp, (char*)&data, sizeof(data), 0) != SOCKET_ERROR)	// Once connection is created, client needs to send() ASAP as server socket is nonblocking
-		{
-			int bytes = 0;
-			char buf[BUFFERLENGTH] = "";
-			if((bytes = recv(socketTemp, buf, sizeof(buf), 0)) != SOCKET_ERROR)
-			{
-				buf[bytes]='\0';
+        if (this->IsWindowVisible() == FALSE)
+        {
+            this->ShowWindow(SW_SHOWNORMAL);
+            this->SetForegroundWindow();
+        }
 
-				memset(&data, 0, sizeof(data));
-				memcpy(&data, buf, min(sizeof(data), bytes));
-				if (data.type == DataType::ServerReceive)
-				{
-					bSent = true;
-				}
-			}
+        int	nSelect = GetCheckedRadioButton(IDC_RADIO_Server, IDC_RADIO_IP);
+		if (nSelect == IDC_RADIO_Server)
+		{
+			pServer->EnableWindow(TRUE);
+			pIP->EnableWindow(FALSE);
+		}
+		else
+		{
+			pServer->EnableWindow(FALSE);
+			pIP->EnableWindow(TRUE);
 		}
 	}
+	else
+	{
+    //    this->ShowWindow(SW_HIDE);
+		pServer->EnableWindow(FALSE);
+		pIP->EnableWindow(FALSE);
+	}
 
-	closesocket( socketTemp);
-	m_bConnected = bSent;
-	return m_bConnected;
+	pRadioServer->EnableWindow(bEnable);
+	pRadioIP->EnableWindow(bEnable);
+	pPort->EnableWindow(bEnable);
+	pConnect->EnableWindow(bEnable);
 }
 
 bool CCatalystMonitorClientDlg::SaveAllSettings()

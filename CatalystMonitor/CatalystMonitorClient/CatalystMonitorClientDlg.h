@@ -27,6 +27,7 @@ public:
 	bool m_bTerminateThread;
 
 	bool DetectSettingChange();
+	bool ParseSettingChange();
 	bool ConnectionTest(bool bMainThread);
     bool SocketSpeedTest();
     bool SendCatalystSetting();
@@ -36,11 +37,12 @@ private:
 	ULONG	m_nIP;		// Server's
 	u_short m_nPort;	// Server's
 	HANDLE	m_hThread;
-	SocketDataSend m_socketData;
+	SocketFeatureData m_socketData;
 
     int					m_nFeatureCount;
 	ADLFeatureCaps*		m_lpFeatureCaps;
 	ADLFeatureValues*	m_lpFeatureValues;
+
 
 	bool SaveAllSettings();
 	bool LoadAllSettings(char* pszServer);
