@@ -4,11 +4,10 @@
 
 #pragma once
 #include "vector"
-#include "..\\include\\VPPDisplayControl.h"
+#include "..\\include\\socket.h"
 
 struct ADLFeatureCaps;
 struct ADLFeatureValues;
-// CCatalystMonitorClientDlg dialog
 class CCatalystMonitorClientDlg : public CDialog
 {
 // Construction
@@ -32,13 +31,6 @@ public:
     bool SocketSpeedTest();
     bool SendCatalystSetting();
 	void EnableDlgItem(BOOL bEnable);
-
-    typedef struct strFeatureChange
-    {
-        char szFeature[32];
-        int bChanged;
-    };
-    typedef std::vector<strFeatureChange> ListFeatureChange;
 
 private:
 	ULONG	m_nIP;		// Server's

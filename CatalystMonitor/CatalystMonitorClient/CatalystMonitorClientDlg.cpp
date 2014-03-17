@@ -6,7 +6,7 @@
 #include "CatalystMonitorClient.h"
 #include "CatalystMonitorClientDlg.h"
 #include "..\\include\\ADLMultiMedia.h"
-#include "..\\include\\VPPDisplayControl.h"
+#include "..\\include\\socket.h"
 #include "vector"
 
 #ifdef _DEBUG
@@ -418,11 +418,12 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
     if (memcmp(m_lpFeatureValues, lpFeatureValues, sizeof(ADLFeatureValues)*m_nFeatureCount) == 0) // no change at all
         return false;
 
-    ListFeatureChange listFeatureChange;
+    memset(&m_socketData, 0, sizeof(SocketDataSend));
+    gethostname(m_socketData.szHostName, sizeof(m_socketData.szHostName));
+
     for (int i=0; i<m_nFeatureCount; i++)
 	{ 
-        strFeatureChange feature = {'\0', 0};
-        strcpy(feature.szFeature, lpFeatureValues[i].Name.FeatureName);
+        strcpy(m_socketData.featureChanges[i].szFeature, lpFeatureValues[i].Name.FeatureName);
 
         int nFeatureType = m_lpFeatureCaps[i].iFeatureProperties & m_lpFeatureCaps[i].iFeatureMask;
 		if (nFeatureType & ADL_FEATURE_PROPERTIES_SUPPORTED) // supported ones
@@ -430,7 +431,7 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
 		    if (nFeatureType & ADL_FEATURE_PROPERTIES_TOGGLE)
 		    {
                 if (m_lpFeatureValues[i].bCurrent != lpFeatureValues[i].bCurrent)
-                    feature.bChanged = 1;
+                    m_socketData.featureChanges[i].bChanged = 1;
 		    }
 		    else
 		    {
@@ -438,33 +439,27 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
 			    if (nFeatureType == ADL_FEATURE_PROPERTIES_INT_RANGE)
 			    {
 				    if (m_lpFeatureValues[i].iCurrent != lpFeatureValues[i].iCurrent)
-                        feature.bChanged = 1;
+                        m_socketData.featureChanges[i].bChanged = 1;
 			    }
 			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_FLOAT_RANGE)
 			    {
 				    if (m_lpFeatureValues[i].fCurrent != lpFeatureValues[i].fCurrent)
-                        feature.bChanged = 1;
+                        m_socketData.featureChanges[i].bChanged = 1;
 			    }
 			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_ENUM)
 			    {
 				    if (m_lpFeatureValues[i].EnumStates != lpFeatureValues[i].EnumStates)
-                        feature.bChanged = 1;
+                        m_socketData.featureChanges[i].bChanged = 1;
 			    }
 		    }
         }
         else // not supported on this adapter
-            feature.bChanged = -1;
-
-	    listFeatureChange.push_back(feature);
+            m_socketData.featureChanges[i].bChanged = -1;
 	}
 
     m_lpFeatureValues = lpFeatureValues;
     lpFeatureValues = NULL;
     ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
-
-	SocketDataSend socketData = {};
-    gethostname(socketData.szHostName, sizeof(socketData.szHostName));
-
 	
 	return true;
 }
@@ -666,7 +661,7 @@ bool CCatalystMonitorClientDlg::SaveAllSettings()
 	fprintf(file, "IP = %s\n", szIP);
 	fprintf(file, "Port = %s\n", szPort);
 	fprintf(file, "\n");
-	fprintf(file, "Adapter = %s\n", m_socketData.szAdapter);
+/*	fprintf(file, "Adapter = %s\n", m_socketData.szAdapter);
 	fprintf(file, "Display = %s\n", m_socketData.szDisplay);
 	fprintf(file, "DrvVersion = %s\n", m_socketData.szDrvVersion);
 	fprintf(file, "Host = %s\n", m_socketData.szHostName);
@@ -693,7 +688,7 @@ bool CCatalystMonitorClientDlg::SaveAllSettings()
         fprintf(file, "%d,", m_socketData.displaySetting.wGamma[2][i]);
     fprintf(file, "\n");
 
-	fprintf(file, "Rate = %d\n", (UINT)m_socketData.displaySetting.rate);
+	fprintf(file, "Rate = %d\n", (UINT)m_socketData.displaySetting.rate);*/
 	fclose(file);
 	return true;
 }
@@ -730,7 +725,7 @@ bool CCatalystMonitorClientDlg::LoadAllSettings(char* pszServer)
 		}
 		else if(strstr(szTemp, "Port = ") == szTemp)
 			sscanf(szTemp, "Port = %d\n", &m_nPort);
-		else if(strstr(szTemp, "Adapter = ") == szTemp)
+/*		else if(strstr(szTemp, "Adapter = ") == szTemp)
 		{
 			strcpy(m_socketData.szAdapter, szTemp+10); // avoid blank space
 			m_socketData.szAdapter[strlen(m_socketData.szAdapter)-1] = '\0';
@@ -802,7 +797,7 @@ bool CCatalystMonitorClientDlg::LoadAllSettings(char* pszServer)
                 pNumber++;
                 m_socketData.displaySetting.wGamma[2][i] = atoi(pNumber);
             }
-        }
+        }*/
 		memset(szTemp, 0, sizeof(szTemp));
 	}
 	fclose(file);

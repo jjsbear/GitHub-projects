@@ -5,7 +5,7 @@
 #pragma once
 
 #include <vector>
-#include "..\\include\\VPPDisplayControl.h"
+#include "..\\include\\socket.h"
 
 // CCatalystMonitorServerDlg dialog
 class CCatalystMonitorServerDlg : public CDialog

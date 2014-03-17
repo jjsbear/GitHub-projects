@@ -440,7 +440,7 @@ bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
 		return false;
 
 	fprintf(file, "%s\n", s_szVPPFlag);
-	for (DisplayList::iterator itDisplay = m_displayList.begin(); itDisplay != m_displayList.end(); ++itDisplay)
+/*	for (DisplayList::iterator itDisplay = m_displayList.begin(); itDisplay != m_displayList.end(); ++itDisplay)
 	{
 		fprintf(file, "\n");
         fprintf(file, "Display: %s\n", itDisplay->szDisplay);
@@ -471,7 +471,7 @@ bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
                 fprintf(file, "\n");
 			}
 		}
-	}
+	}*/
 
 	fclose(file);
 	return true;
