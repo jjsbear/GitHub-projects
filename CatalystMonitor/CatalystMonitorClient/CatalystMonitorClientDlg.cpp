@@ -7,12 +7,12 @@
 #include "CatalystMonitorClientDlg.h"
 #include "..\\include\\ADLMultiMedia.h"
 #include "..\\include\\VPPDisplayControl.h"
+#include "vector"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-static LPADLFeatureValues s_pFeatureValues = NULL;
 static ADLMultiMedia s_ADLMultiMedia;
 static char s_szIniFile[] = "CatalystMonitorClient.ini";
 static char s_szVPPClientFlag[] = "VPP Display Control Client";
@@ -65,11 +65,19 @@ CCatalystMonitorClientDlg::CCatalystMonitorClientDlg(CWnd* pParent /*=NULL*/)
 	m_bTerminateThread = false;
 	m_bConnected = false;
 	memset(&m_socketData, 0, sizeof(m_socketData));
+
+    m_lpFeatureCaps = NULL;
+	m_lpFeatureValues = NULL;
 }
 
 CCatalystMonitorClientDlg::~CCatalystMonitorClientDlg()
 {
 	WSACleanup();
+
+    if (m_lpFeatureCaps)
+		ADLMultiMedia::ADL_Main_Memory_Free((void**)&m_lpFeatureCaps);
+	if (m_lpFeatureValues)
+		ADLMultiMedia::ADL_Main_Memory_Free((void**)&m_lpFeatureValues);
 }
 
 void CCatalystMonitorClientDlg::DoDataExchange(CDataExchange* pDX)
@@ -384,13 +392,78 @@ void CCatalystMonitorClientDlg::EnableDlgItem(BOOL bEnable)
 bool CCatalystMonitorClientDlg::DetectSettingChange()
 {
     int nFeatureCount = 0;
-    LPADLFeatureValues lpAdlFeatureValues = NULL;
-    bool result =  s_ADLMultiMedia.ADLFeatureValuesGet(0, lpAdlFeatureValues, &nFeatureCount);
+    LPADLFeatureCaps lpFeatureCaps = NULL;
+    LPADLFeatureValues lpFeatureValues = NULL;    
+    
+    bool ADL_Err = s_ADLMultiMedia.ADLFeatureCaps(0, lpFeatureCaps, &nFeatureCount);
+	ADL_Err = s_ADLMultiMedia.ADLFeatureValuesGet(0, lpFeatureValues, &nFeatureCount);
+	if (lpFeatureCaps==NULL || lpFeatureValues==NULL)
+    {
+        ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
+        ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
+		return false;
+    }
 
-    ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpAdlFeatureValues);
-//    m_sFeatureValues
-//	SocketDataSend socketData = {};
-//    gethostname(socketData.szHostName, sizeof(socketData.szHostName));
+    if (m_lpFeatureValues == NULL)
+    {
+        ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
+        m_lpFeatureValues = lpFeatureValues;
+        lpFeatureValues = NULL;
+        m_nFeatureCount = nFeatureCount;
+        return false;
+    }
+    
+    assert(m_nFeatureCount == nFeatureCount);
+    
+    if (memcmp(m_lpFeatureValues, lpFeatureValues, sizeof(ADLFeatureValues)*m_nFeatureCount) == 0) // no change at all
+        return false;
+
+    ListFeatureChange listFeatureChange;
+    for (int i=0; i<m_nFeatureCount; i++)
+	{ 
+        strFeatureChange feature = {'\0', 0};
+        strcpy(feature.szFeature, lpFeatureValues[i].Name.FeatureName);
+
+        int nFeatureType = m_lpFeatureCaps[i].iFeatureProperties & m_lpFeatureCaps[i].iFeatureMask;
+		if (nFeatureType & ADL_FEATURE_PROPERTIES_SUPPORTED) // supported ones
+        {
+		    if (nFeatureType & ADL_FEATURE_PROPERTIES_TOGGLE)
+		    {
+                if (m_lpFeatureValues[i].bCurrent != lpFeatureValues[i].bCurrent)
+                    feature.bChanged = 1;
+		    }
+		    else
+		    {
+			    nFeatureType = 	nFeatureType & ADL_FEATURE_PROPERTIES_ADJUSTMASK;
+			    if (nFeatureType == ADL_FEATURE_PROPERTIES_INT_RANGE)
+			    {
+				    if (m_lpFeatureValues[i].iCurrent != lpFeatureValues[i].iCurrent)
+                        feature.bChanged = 1;
+			    }
+			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_FLOAT_RANGE)
+			    {
+				    if (m_lpFeatureValues[i].fCurrent != lpFeatureValues[i].fCurrent)
+                        feature.bChanged = 1;
+			    }
+			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_ENUM)
+			    {
+				    if (m_lpFeatureValues[i].EnumStates != lpFeatureValues[i].EnumStates)
+                        feature.bChanged = 1;
+			    }
+		    }
+        }
+        else // not supported on this adapter
+            feature.bChanged = -1;
+
+	    listFeatureChange.push_back(feature);
+	}
+
+    m_lpFeatureValues = lpFeatureValues;
+    lpFeatureValues = NULL;
+    ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);
+
+	SocketDataSend socketData = {};
+    gethostname(socketData.szHostName, sizeof(socketData.szHostName));
 
 	
 	return true;

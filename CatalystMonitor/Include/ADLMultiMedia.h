@@ -51,7 +51,7 @@ public:
     int  GetDisplayColor(int nAdapterIndex, int nDisplayIndex, int nColorType, int* pCurrent, int* pDefault, int* pMin, int* pMax, int* pStep);
     int  SetDisplayColor(int nAdapterIndex, int nDisplayIndex, int nColorType, int nCurrent);
 
-    bool ADLFeatureCaps(LPADLFeatureCaps& lpAdlFeatureCaps, int* pFeatureCount);
+    bool ADLFeatureCaps(int adapter, LPADLFeatureCaps& lpAdlFeatureCaps, int* pFeatureCount);
     bool ADLFeatureValuesGet(int adapter, LPADLFeatureValues& lpAdlFeatureValues, int* nFeatureCount);
     bool ADLFeatureValuesSet(LPADLFeatureValues& lpAdlFeatureValues, int nFeatureCount);
     void DoTest();

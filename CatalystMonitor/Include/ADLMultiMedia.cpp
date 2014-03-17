@@ -235,7 +235,7 @@ int ADLMultiMedia::SetDisplayColor(int nAdapterIndex, int nDisplayIndex, int nCo
     return -1;
 }
 
-bool ADLMultiMedia::ADLFeatureCaps(LPADLFeatureCaps& lpAdlFeatureCaps, int* pFeatureCount)
+bool ADLMultiMedia::ADLFeatureCaps(int adapter, LPADLFeatureCaps& lpAdlFeatureCaps, int* pFeatureCount)
 {
     if (ADL_MMD_Features_Caps == NULL)
         return false;

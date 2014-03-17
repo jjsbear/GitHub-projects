@@ -3,8 +3,11 @@
 //
 
 #pragma once
+#include "vector"
 #include "..\\include\\VPPDisplayControl.h"
 
+struct ADLFeatureCaps;
+struct ADLFeatureValues;
 // CCatalystMonitorClientDlg dialog
 class CCatalystMonitorClientDlg : public CDialog
 {
@@ -19,7 +22,6 @@ public:
 	protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 
-
 // Implementation
 public:	
     bool m_bConnected;
@@ -31,11 +33,22 @@ public:
     bool SendCatalystSetting();
 	void EnableDlgItem(BOOL bEnable);
 
+    typedef struct strFeatureChange
+    {
+        char szFeature[32];
+        int bChanged;
+    };
+    typedef std::vector<strFeatureChange> ListFeatureChange;
+
 private:
 	ULONG	m_nIP;		// Server's
 	u_short m_nPort;	// Server's
 	HANDLE	m_hThread;
 	SocketDataSend m_socketData;
+
+    int					m_nFeatureCount;
+	ADLFeatureCaps*		m_lpFeatureCaps;
+	ADLFeatureValues*	m_lpFeatureValues;
 
 	bool SaveAllSettings();
 	bool LoadAllSettings(char* pszServer);
