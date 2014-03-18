@@ -453,7 +453,7 @@ bool CCatalystMonitorClientDlg::ParseSettingChange()
 		    if (nFeatureType & ADL_FEATURE_PROPERTIES_TOGGLE)
 		    {
                 if (m_lpFeatureValues[i].bCurrent != lpFeatureValues[i].bCurrent)
-                    m_socketData.featureChanges[i].bChanged = 1;
+                    m_socketData.featureChanges[i].nChanged = 1;
 		    }
 		    else
 		    {
@@ -461,22 +461,22 @@ bool CCatalystMonitorClientDlg::ParseSettingChange()
 			    if (nFeatureType == ADL_FEATURE_PROPERTIES_INT_RANGE)
 			    {
 				    if (m_lpFeatureValues[i].iCurrent != lpFeatureValues[i].iCurrent)
-                        m_socketData.featureChanges[i].bChanged = 1;
+                        m_socketData.featureChanges[i].nChanged = 1;
 			    }
 			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_FLOAT_RANGE)
 			    {
 				    if (m_lpFeatureValues[i].fCurrent != lpFeatureValues[i].fCurrent)
-                        m_socketData.featureChanges[i].bChanged = 1;
+                        m_socketData.featureChanges[i].nChanged = 1;
 			    }
 			    else if (nFeatureType == ADL_FEATURE_PROPERTIES_ENUM)
 			    {
 				    if (m_lpFeatureValues[i].EnumStates != lpFeatureValues[i].EnumStates)
-                        m_socketData.featureChanges[i].bChanged = 1;
+                        m_socketData.featureChanges[i].nChanged = 1;
 			    }
 		    }
         }
         else // not supported on this adapter
-            m_socketData.featureChanges[i].bChanged = -1;
+            m_socketData.featureChanges[i].nChanged = -1;
 	}
     
     ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureCaps);

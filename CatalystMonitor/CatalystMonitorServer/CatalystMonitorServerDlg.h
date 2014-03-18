@@ -6,6 +6,7 @@
 
 #include <vector>
 #include "..\\include\\socket.h"
+#include "afxwin.h"
 
 // CCatalystMonitorServerDlg dialog
 class CCatalystMonitorServerDlg : public CDialog
@@ -31,6 +32,16 @@ public:
 private:
 	HANDLE m_hThread;
 	SOCKET m_socketServer;
+    RECT   m_rectFeaturesChange;
+
+    typedef struct ClientFeatures
+    {
+	    char		szHostName[256];
+	    strFeatureChange featureChanges[FEATURECOUNT];
+    } ClientFeatures, *LPClientFeatures;
+
+    typedef std::vector<ClientFeatures> ListClientsFeatures;
+    ListClientsFeatures m_listClientsFeatures;
 
 	void CreateServerSocket();
 	bool InitializeService();
@@ -52,4 +63,6 @@ protected:
 public:
 	afx_msg void OnBnClickedButtonService();
 	afx_msg void OnBnClickedButtonClose();
+    afx_msg void OnCbnSelchangeComboClient();
+    CComboBox m_ComboBoxClient;
 };

@@ -67,7 +67,8 @@ CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
 
 void CCatalystMonitorServerDlg::DoDataExchange(CDataExchange* pDX)
 {
-	CDialog::DoDataExchange(pDX);
+    CDialog::DoDataExchange(pDX);
+    DDX_Control(pDX, IDC_COMBO_Client, m_ComboBoxClient);
 }
 
 BEGIN_MESSAGE_MAP(CCatalystMonitorServerDlg, CDialog)
@@ -78,6 +79,7 @@ BEGIN_MESSAGE_MAP(CCatalystMonitorServerDlg, CDialog)
 	//}}AFX_MSG_MAP
 	ON_BN_CLICKED(IDC_BUTTON_Service, &CCatalystMonitorServerDlg::OnBnClickedButtonService)
 	ON_BN_CLICKED(IDC_BUTTON_Close, &CCatalystMonitorServerDlg::OnBnClickedButtonClose)
+    ON_CBN_SELCHANGE(IDC_COMBO_Client, &CCatalystMonitorServerDlg::OnCbnSelchangeComboClient)
 END_MESSAGE_MAP()
 
 
@@ -112,7 +114,18 @@ BOOL CCatalystMonitorServerDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// Set big icon
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
-	CWnd* pPort = GetDlgItem(IDC_EDIT_Port);
+	CWnd* pFeaturesChage = GetDlgItem(IDC_STATIC_FeaturesChange);
+	if (pFeaturesChage)
+	{
+		pFeaturesChage->GetWindowRect(&m_rectFeaturesChange);
+		ScreenToClient(&m_rectFeaturesChange);
+		pFeaturesChage->MoveWindow(m_rectFeaturesChange.left, m_rectFeaturesChange.top, 600, 180);
+
+		pFeaturesChage->GetWindowRect(&m_rectFeaturesChange);
+		ScreenToClient(&m_rectFeaturesChange);
+    }
+    
+    CWnd* pPort = GetDlgItem(IDC_EDIT_Port);
 	if (pPort)
 		pPort->SetWindowTextA("1986");
 
@@ -120,7 +133,7 @@ BOOL CCatalystMonitorServerDlg::OnInitDialog()
 	UpdateLocalHostIP();
 	LoadDisplayListFromFile();
 
-	return TRUE;  // return TRUE  unless you set the focus to a control
+    return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
 void CCatalystMonitorServerDlg::OnSysCommand(UINT nID, LPARAM lParam)
@@ -428,7 +441,26 @@ void CCatalystMonitorServerDlg::OnBnClickedButtonClose()
 
 bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
 {
-
+    bool exist = false;
+    for (ListClientsFeatures::iterator iterator = m_listClientsFeatures.begin(); iterator!=m_listClientsFeatures.end(); ++iterator)
+    {
+        if (stricmp(socketData.szHostName, iterator->szHostName) == 0)
+        {
+            for (int i=0; i<FEATURECOUNT; i++)
+            {
+                if (socketData.featureChanges[i].nChanged > 0)
+                    iterator->featureChanges[i].nChanged++;
+            }
+            exist = true;
+        }
+    }
+    
+    if (!exist) // new client
+    {
+        ClientFeatures client;
+        strcpy(client.szHostName, socketData.szHostName);
+        memcpy(client.featureChanges, socketData.featureChanges, sizeof(strFeatureChange)*FEATURECOUNT);
+    }
 	return true;
 }
 
@@ -573,3 +605,9 @@ CString CCatalystMonitorServerDlg::GetModulePath()
 	return strTemp;
 }
 
+
+
+void CCatalystMonitorServerDlg::OnCbnSelchangeComboClient()
+{
+    return;
+}

@@ -16,13 +16,11 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// English (U.S.) resources
+// English (United States) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
-#ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 #pragma code_page(1252)
-#endif //_WIN32
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -88,20 +86,22 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,113,41,50,14,WS_GROUP
 END
 
-IDD_CatalystMonitorServer_DIALOG DIALOGEX 0, 0, 266, 53
+IDD_CatalystMonitorServer_DIALOG DIALOGEX 0, 0, 433, 191
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_APPWINDOW
 CAPTION "CatalystMonitorServer"
 FONT 8, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
-    EDITTEXT        IDC_EDIT_Port,54,31,40,14,ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "Port:",IDC_STATIC,36,33,17,8
-    DEFPUSHBUTTON   "Serve",IDC_BUTTON_Service,148,32,50,14,WS_GROUP
-    EDITTEXT        IDC_EDIT_Host,54,8,80,14,ES_AUTOHSCROLL | WS_DISABLED
-    LTEXT           "Server Name:",IDC_STATIC,7,10,46,8
-    EDITTEXT        IDC_EDIT_IP,177,8,80,14,ES_AUTOHSCROLL | WS_DISABLED
-    LTEXT           "IP:",IDC_STATIC,165,10,10,8
-    PUSHBUTTON      "Close",IDC_BUTTON_Close,208,32,50,14
+    EDITTEXT        IDC_EDIT_Port,310,162,40,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Port:",IDC_STATIC,292,164,17,8
+    DEFPUSHBUTTON   "Serve",IDC_BUTTON_Service,374,164,50,14,WS_GROUP
+    EDITTEXT        IDC_EDIT_Host,57,162,80,14,ES_AUTOHSCROLL | WS_DISABLED
+    LTEXT           "Server Name:",IDC_STATIC,10,164,46,8
+    EDITTEXT        IDC_EDIT_IP,180,162,80,14,ES_AUTOHSCROLL | WS_DISABLED
+    LTEXT           "IP:",IDC_STATIC,168,164,10,8
+    PUSHBUTTON      "Close",IDC_BUTTON_Close,372,10,50,14
+    COMBOBOX        IDC_COMBO_Client,10,11,79,114,CBS_DROPDOWN | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Features change",IDC_STATIC_FeaturesChange,9,33,414,119,0,WS_EX_STATICEDGE
 END
 
 
@@ -150,7 +150,7 @@ END
 //
 
 #ifdef APSTUDIO_INVOKED
-GUIDELINES DESIGNINFO 
+GUIDELINES DESIGNINFO
 BEGIN
     IDD_ABOUTBOX, DIALOG
     BEGIN
@@ -158,6 +158,10 @@ BEGIN
         RIGHTMARGIN, 163
         TOPMARGIN, 7
         BOTTOMMARGIN, 55
+    END
+
+    IDD_CatalystMonitorServer_DIALOG, DIALOG
+    BEGIN
     END
 END
 #endif    // APSTUDIO_INVOKED
@@ -168,12 +172,12 @@ END
 // String Table
 //
 
-STRINGTABLE 
+STRINGTABLE
 BEGIN
     IDS_ABOUTBOX            "&About CatalystMonitorServer..."
 END
 
-#endif    // English (U.S.) resources
+#endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
