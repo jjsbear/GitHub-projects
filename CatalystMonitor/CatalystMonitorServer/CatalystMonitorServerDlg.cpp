@@ -383,24 +383,21 @@ bool CCatalystMonitorServerDlg::CreateClientSocket(SOCKET& clientSocket)
 
 bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
 {
-    int exist = -1;
-    for (ListClientsFeatures::iterator iterator = m_listClientsFeatures.begin(); iterator!=m_listClientsFeatures.end(); ++iterator)
+	int i;
+	for (i=0; i< m_listClientsFeatures.size(); i++)
     {
-        if (stricmp(socketData.szHostName, iterator->szHostName) == 0)
+        if (stricmp(socketData.szHostName, m_listClientsFeatures[i].szHostName) == 0)
         {
-            for (int i=0; i<FEATURECOUNT; i++)
+            for (int j=0; j<FEATURECOUNT; j++)
             {
-                if (socketData.featureChanges[i].nChanged > 0)
-                    iterator->featureChanges[i].nChanged++;
+                if (socketData.featureChanges[j].nChanged > 0)
+                    m_listClientsFeatures[i].featureChanges[j].nChanged++;
             }
-            exist++;
 			break;
         }
-		else
-			exist++;
     }
     
-    if (exist < 0) // new client
+    if (i == m_listClientsFeatures.size()) // new client
     {
         ClientFeatures client;
         strcpy(client.szHostName, socketData.szHostName);
@@ -409,13 +406,10 @@ bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
 
 		m_ComboBoxClient.AddString(client.szHostName);
 		if (m_ComboBoxClient.GetCount() == 1) // only one client
-		{
 			m_ComboBoxClient.SetCurSel(0);
-			exist = 0;
-		}
     }
 
-	if (m_ComboBoxClient.GetCurSel() == exist)
+	if (m_ComboBoxClient.GetCurSel() == i)
 		m_updateDisplay = true;
 
 	return true;
@@ -504,16 +498,38 @@ bool CCatalystMonitorServerDlg::LoadDisplayListFromFile()
 		return false;
 	}
 
+	m_listClientsFeatures.clear();
+
+	int index = 0;
+	bool bGetClient = false;
+	ClientFeatures clientFeature = {};
+	
 	char szTemp[256] = "";
 	while (fgets(szTemp, sizeof(szTemp), file) != NULL)
 	{
-		if (strstr(szTemp, "Display: ") == szTemp)
+		if (strstr(szTemp, "Client: ") == szTemp)
 		{
+			if (bGetClient)
+			{
+				m_listClientsFeatures.push_back(clientFeature);
+				memset(&clientFeature, 0, sizeof(ClientFeatures));
+			}
 
+			index = 0;
+			bGetClient = true;
+			strcpy(clientFeature.szHostName, szTemp+8);
 		}
-		else if (strstr(szTemp, "Adapter: ") == szTemp)
+		else if (bGetClient)
 		{
-
+			char name[32]="";
+			int value=-2;
+			sscanf(szTemp, "%s: %d", name, &value);
+			if (strlen(name) > 0 && value >=-1)
+			{
+				strcpy(clientFeature.featureChanges[index].szFeature, name);
+				clientFeature.featureChanges[index].nChanged = value;
+				index++;
+			}
 		}
 		
 		memset(szTemp, 0, sizeof(szTemp));
@@ -532,38 +548,13 @@ bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
 		return false;
 
 	fprintf(file, "%s\n", s_szVPPFlag);
-/*	for (DisplayList::iterator itDisplay = m_displayList.begin(); itDisplay != m_displayList.end(); ++itDisplay)
+	for (ListClientsFeatures::iterator iterator = m_listClientsFeatures.begin(); iterator!=m_listClientsFeatures.end(); ++iterator)
 	{
 		fprintf(file, "\n");
-        fprintf(file, "Display: %s\n", itDisplay->szDisplay);
-		for (AdapterList::iterator itAdapter = itDisplay->adapterList.begin(); itAdapter != itDisplay->adapterList.end(); ++itAdapter)
-		{
-			fprintf(file, "Adapter: %s\n", itAdapter->szAdapter);
-			for (SettingList::iterator itSetting = itAdapter->settingList.begin(); itSetting != itAdapter->settingList.end(); ++itSetting)
-			{
-				char szFormat[256] = "";
-				sprintf(szFormat, "%s\n", s_szSettingFormat);
-				fprintf(file, szFormat, itSetting->nXResolution, itSetting->nYResolution, itSetting->nColourDepth, itSetting->fRefreshRate, 
-                    itSetting->nBrightness, itSetting->nContrast, itSetting->nSaturation, itSetting->nHue, itSetting->nTemperature, itSetting->rate);
-                
-                fprintf(file, "    GammaR: ");
-                for (int i=0; i<256; i++)
-                    fprintf(file, "%d,", itSetting->wGamma[0][i]);
-                fprintf(file, "\n");
-
-                fprintf(file, "    GammaG: ");
-                for (int i=0; i<256; i++)
-                    fprintf(file, "%d,", itSetting->wGamma[1][i]);
-                fprintf(file, "\n");
-
-                fprintf(file, "    GammaB: ");
-                for (int i=0; i<256; i++)
-                    fprintf(file, "%d,", itSetting->wGamma[2][i]);
-                fprintf(file, "\n");
-                fprintf(file, "\n");
-			}
-		}
-	}*/
+		fprintf(file, "Client: %s\n", iterator->szHostName);
+		for (int i=0; i<FEATURECOUNT; i++)
+			fprintf(file, "%s: %d\n", iterator->featureChanges[i].szFeature, iterator->featureChanges[i].nChanged);
+	}
 
 	fclose(file);
 	return true;
