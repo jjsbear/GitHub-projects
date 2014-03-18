@@ -28,12 +28,17 @@ public:
 	bool CreateClientSocket(SOCKET& clientSocket);
 	bool AddOneSetting(SocketFeatureData socketData);
 	bool RecordService(SocketFeatureData& socketData);
+	void CreateFeaturesDisplayData(int index);
+	void DisplayFeaturesHistogram();
 
 private:
 	HANDLE m_hThread;
 	SOCKET m_socketServer;
-    RECT   m_rectFeaturesChange;
-    HBITMAP m_hFeatures;
+
+	int     m_nStride;
+	byte*   m_dataFeatures;
+    HBITMAP m_bitmapFeatures;
+    RECT    m_rectFeaturesChange;
 
     typedef struct ClientFeatures
     {
@@ -65,5 +70,6 @@ public:
 	afx_msg void OnBnClickedButtonService();
 	afx_msg void OnBnClickedButtonClose();
     afx_msg void OnCbnSelchangeComboClient();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
     CComboBox m_ComboBoxClient;
 };

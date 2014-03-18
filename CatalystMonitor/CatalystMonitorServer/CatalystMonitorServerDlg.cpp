@@ -60,6 +60,18 @@ CCatalystMonitorServerDlg::CCatalystMonitorServerDlg(CWnd* pParent /*=NULL*/)
 	m_socketServer = NULL;
 	m_hThread = NULL;
 	m_bTerminateThread = false;
+
+	m_nStride = (VISUAL_WIDTH*3+3)/4*4;
+	m_dataFeatures = new byte[m_nStride*VISUAL_HEIGHT];
+    memset(m_dataFeatures, 0xFF, m_nStride*VISUAL_HEIGHT);
+
+	HDC hDC = ::GetDC(::GetDesktopWindow());
+	HDC memDC = CreateCompatibleDC ( hDC );
+	BITMAPINFOHEADER bmpNewInfo = {sizeof(BITMAPINFOHEADER), VISUAL_WIDTH, VISUAL_HEIGHT, 1, 24, BI_RGB, m_nStride*VISUAL_HEIGHT, 0, 0, 0, 0};
+
+    void *	pData = 0;
+	m_bitmapFeatures = CreateDIBSection( memDC, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS, &pData, NULL, 0);
+	SetDIBits( memDC, m_bitmapFeatures, 0, VISUAL_HEIGHT, m_dataFeatures, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS);
 }
 
 CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
@@ -67,6 +79,10 @@ CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
 	closesocket(m_socketServer);
 	WSACleanup();
     m_listClientsFeatures.clear();
+
+	if (m_bitmapFeatures)
+		DeleteObject(m_bitmapFeatures);
+	delete[] m_dataFeatures;
 }
 
 void CCatalystMonitorServerDlg::DoDataExchange(CDataExchange* pDX)
@@ -84,6 +100,7 @@ BEGIN_MESSAGE_MAP(CCatalystMonitorServerDlg, CDialog)
 	ON_BN_CLICKED(IDC_BUTTON_Service, &CCatalystMonitorServerDlg::OnBnClickedButtonService)
 	ON_BN_CLICKED(IDC_BUTTON_Close, &CCatalystMonitorServerDlg::OnBnClickedButtonClose)
     ON_CBN_SELCHANGE(IDC_COMBO_Client, &CCatalystMonitorServerDlg::OnCbnSelchangeComboClient)
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
@@ -137,6 +154,7 @@ BOOL CCatalystMonitorServerDlg::OnInitDialog()
 	UpdateLocalHostIP();
 	LoadDisplayListFromFile();
 
+	SetTimer(1, 50, NULL);
     return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -466,7 +484,52 @@ bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
         memcpy(client.featureChanges, socketData.featureChanges, sizeof(strFeatureChange)*FEATURECOUNT);
         m_listClientsFeatures.push_back(client);
     }
+
+	CreateFeaturesDisplayData(0);
 	return true;
+}
+
+void CCatalystMonitorServerDlg::CreateFeaturesDisplayData(int index)
+{
+	if (index >= m_listClientsFeatures.size())
+    {
+        memset(m_dataFeatures, 0, m_nStride*VISUAL_HEIGHT);
+    }
+    else
+    {
+		strFeatureChange* pFeatureData = m_listClientsFeatures[index].featureChanges;
+
+        byte* pDestR = m_dataFeatures;
+
+        for (int i=0; i<VISUAL_HEIGHT; i++)
+        {
+            for (int j=0; j<VISUAL_WIDTH; j++)
+            {
+				if (i < pFeatureData[j].nChanged)
+                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 0;
+                else
+                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 255;
+            }
+            pDestR += m_nStride;
+        }
+    }
+}
+
+void CCatalystMonitorServerDlg::DisplayFeaturesHistogram()
+{
+	CDC memDC;
+	CDC *pDC = GetDC();
+	memDC.CreateCompatibleDC( pDC);
+    
+    BITMAP bm;
+	GetObject(m_bitmapFeatures, sizeof(BITMAP), &bm);
+	memcpy(bm.bmBits, m_dataFeatures, bm.bmWidthBytes*bm.bmHeight);
+	HBITMAP pOldBmp = (HBITMAP)memDC.SelectObject(m_bitmapFeatures);
+	pDC->BitBlt(m_rectFeaturesChange.left, m_rectFeaturesChange.top, VISUAL_WIDTH, VISUAL_HEIGHT, &memDC, 0, 0,SRCCOPY);
+	memDC.SelectObject( pOldBmp);
+
+	memDC.DeleteDC();
+	ReleaseDC(pDC);
 }
 
 bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
@@ -550,22 +613,6 @@ bool CCatalystMonitorServerDlg::LoadDisplayListFromFile()
 	return true;
 }
 
-/*
-void CCatalystMonitorServerDlg::ClearOneDisplay(strDisplay& display)
-{
-	memset(display.szDisplay, 0, sizeof(display.szDisplay));
-	for (AdapterList::iterator itAdapter = display.adapterList.begin(); itAdapter != display.adapterList.end(); ++itAdapter)
-		ClearOneAdapter(*itAdapter);
-
-	display.adapterList.clear();
-}
-
-void CCatalystMonitorServerDlg::ClearOneAdapter(strAdapter& adapter)
-{
-	memset(adapter.szAdapter, 0, sizeof(adapter.szAdapter));
-	adapter.settingList.clear();
-}*/
-
 bool CCatalystMonitorServerDlg::RecordService(SocketFeatureData& socketData)
 {
 	CString strFile = GetModulePath();
@@ -610,9 +657,15 @@ CString CCatalystMonitorServerDlg::GetModulePath()
 	return strTemp;
 }
 
-
-
 void CCatalystMonitorServerDlg::OnCbnSelchangeComboClient()
 {
     return;
+}
+
+void CCatalystMonitorServerDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	//TODO: sync with generating visualization thread
+	DisplayFeaturesHistogram();
+
+	CDialog::OnTimer(nIDEvent);
 }
