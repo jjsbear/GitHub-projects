@@ -33,6 +33,7 @@ private:
 	HANDLE m_hThread;
 	SOCKET m_socketServer;
     RECT   m_rectFeaturesChange;
+    HBITMAP m_hFeatures;
 
     typedef struct ClientFeatures
     {

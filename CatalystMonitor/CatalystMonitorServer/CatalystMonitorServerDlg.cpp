@@ -10,6 +10,9 @@
 #define new DEBUG_NEW
 #endif
 
+#define VISUAL_WIDTH 600
+#define VISUAL_HEIGHT 200
+
 static char s_szDisplayList[] = "CatalystMonitorServer.data";
 static char s_szVPPFlag[] = "Catalyst Monitor Server";
 static char s_szSettingFormat[] = "XRes: %d, YRes: %d, Color: %d, RefreshRate: %f, Brightness: %d, Contrast: %d, Saturation: %d, Hue: %d, Temperature: %d, Rate: %d";
@@ -63,6 +66,7 @@ CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
 {
 	closesocket(m_socketServer);
 	WSACleanup();
+    m_listClientsFeatures.clear();
 }
 
 void CCatalystMonitorServerDlg::DoDataExchange(CDataExchange* pDX)
@@ -119,7 +123,7 @@ BOOL CCatalystMonitorServerDlg::OnInitDialog()
 	{
 		pFeaturesChage->GetWindowRect(&m_rectFeaturesChange);
 		ScreenToClient(&m_rectFeaturesChange);
-		pFeaturesChage->MoveWindow(m_rectFeaturesChange.left, m_rectFeaturesChange.top, 600, 180);
+        pFeaturesChage->MoveWindow(m_rectFeaturesChange.left, m_rectFeaturesChange.top, VISUAL_WIDTH, VISUAL_HEIGHT);
 
 		pFeaturesChage->GetWindowRect(&m_rectFeaturesChange);
 		ScreenToClient(&m_rectFeaturesChange);
@@ -460,6 +464,7 @@ bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
         ClientFeatures client;
         strcpy(client.szHostName, socketData.szHostName);
         memcpy(client.featureChanges, socketData.featureChanges, sizeof(strFeatureChange)*FEATURECOUNT);
+        m_listClientsFeatures.push_back(client);
     }
 	return true;
 }
