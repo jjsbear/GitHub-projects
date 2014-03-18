@@ -63,6 +63,7 @@ CCatalystMonitorClientDlg::CCatalystMonitorClientDlg(CWnd* pParent /*=NULL*/)
 
     m_lpFeatureCaps = NULL;
 	m_lpFeatureValues = NULL;
+    m_nFeatureCount = 0;
 }
 
 CCatalystMonitorClientDlg::~CCatalystMonitorClientDlg()
@@ -294,7 +295,7 @@ void ThreadDetectCatalystSettingChange(LPVOID param)
 {
 	const int nInterval = 2000; // milliseconds
 	int nIntervalBetweenChanges = 60000 / nInterval; // 60 000: 1 minutes, 600 000: 10 minutes, time to send current setting to server
-	int nCount = 0;
+	int nCount = nIntervalBetweenChanges;
 
 	CCatalystMonitorClientDlg* displayClient = static_cast<CCatalystMonitorClientDlg*>(param); 
 	while (displayClient)
@@ -400,7 +401,7 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
 	if (lpFeatureValues==NULL)
 		return false;
     
-	assert(m_nFeatureCount == nFeatureCount);
+	assert(m_nFeatureCount == nFeatureCount || m_nFeatureCount==0);
     if (m_lpFeatureValues == NULL) // first detect
     {
         m_lpFeatureValues = lpFeatureValues;
@@ -409,11 +410,17 @@ bool CCatalystMonitorClientDlg::DetectSettingChange()
         return false;
     }
 
+    //memset(m_lpFeatureValues, 0, sizeof(ADLFeatureValues)*m_nFeatureCount);
 	if (memcmp(m_lpFeatureValues, lpFeatureValues, sizeof(ADLFeatureValues)*m_nFeatureCount) == 0) // no change at all
+    {
+    	ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
         return false;
-
-	ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
-	return true;
+    }
+    else
+    {
+	    ADLMultiMedia::ADL_Main_Memory_Free((void**)&lpFeatureValues);
+	    return true;
+    }
 }
 
 bool CCatalystMonitorClientDlg::ParseSettingChange()
@@ -440,7 +447,7 @@ bool CCatalystMonitorClientDlg::ParseSettingChange()
 	{ 
         strcpy(m_socketData.featureChanges[i].szFeature, lpFeatureValues[i].Name.FeatureName);
 
-        int nFeatureType = m_lpFeatureCaps[i].iFeatureProperties & m_lpFeatureCaps[i].iFeatureMask;
+        int nFeatureType = lpFeatureCaps[i].iFeatureProperties & lpFeatureCaps[i].iFeatureMask;
 		if (nFeatureType & ADL_FEATURE_PROPERTIES_SUPPORTED) // supported ones
         {
 		    if (nFeatureType & ADL_FEATURE_PROPERTIES_TOGGLE)

@@ -19,14 +19,22 @@ void __stdcall ADLMultiMedia::ADL_Main_Memory_Free ( void** lpBuffer )
 ADLMultiMedia::ADLMultiMedia()
 {
     char sztemp[20];
-    sprintf_s(sztemp, "atiadlxx.dll");
-    m_hDLL = LoadLibraryA(sztemp);
-    if (m_hDLL == NULL)
+    if (true)
     {
-        // A 32 bit calling application on 64 bit OS will fail to LoadLIbrary.
-        // Try to load the 32 bit library (atiadlxy.dll) instead
-        sprintf_s(sztemp, "atiadlxy.dll");
+        sprintf_s(sztemp, 20, "VPP_ADL.dll");
         m_hDLL = LoadLibraryA(sztemp);
+    }
+    else
+    {
+        sprintf_s(sztemp, "atiadlxx.dll");
+        m_hDLL = LoadLibraryA(sztemp);
+        if (m_hDLL == NULL)
+        {
+            // A 32 bit calling application on 64 bit OS will fail to LoadLIbrary.
+            // Try to load the 32 bit library (atiadlxy.dll) instead
+            sprintf_s(sztemp, "atiadlxy.dll");
+            m_hDLL = LoadLibraryA(sztemp);
+        }
     }
 
     if (m_hDLL == NULL)
@@ -62,21 +70,9 @@ ADLMultiMedia::ADLMultiMedia()
 
 
     if ( NULL == ADL_Main_Control_Create ||
-		NULL == ADL_Main_Control_Refresh ||
+		NULL == ADL_Main_Control_Destroy ||
 		NULL == ADL_Adapter_NumberOfAdapters_Get ||
-		NULL == ADL_Adapter_AdapterInfo_Get ||
-		NULL == ADL_Display_DisplayInfo_Get ||
-		NULL == ADL_Adapter_Active_Get || 
-		NULL == ADL_Display_DisplayMapConfig_Get || 
-		NULL == ADL_Display_Modes_Get || 
-		NULL == ADL_Adapter_NumberOfActivatableSources_Get ||
-		NULL == ADL_Display_PossibleMode_Get || 
-		NULL == ADL_Display_PixelClockCaps_Get || 
-		NULL == ADL_Display_ColorCaps_Get || 
-		NULL == ADL_Display_Color_Get || 
-		NULL == ADL_Display_Color_Set || 
-		NULL == ADL_Main_Control_Destroy || 
-		NULL == ADL_Graphics_Versions_Get )
+		NULL == ADL_Adapter_Active_Get)
 	   return;
 
     // The second parameter is 1, which means:
