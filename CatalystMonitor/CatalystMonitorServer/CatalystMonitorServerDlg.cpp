@@ -61,17 +61,20 @@ CCatalystMonitorServerDlg::CCatalystMonitorServerDlg(CWnd* pParent /*=NULL*/)
 	m_hThread = NULL;
 	m_bTerminateThread = false;
 
+	m_updateDisplay = false;
 	m_nStride = (VISUAL_WIDTH*3+3)/4*4;
 	m_dataFeatures = new byte[m_nStride*VISUAL_HEIGHT];
     memset(m_dataFeatures, 0xFF, m_nStride*VISUAL_HEIGHT);
 
 	HDC hDC = ::GetDC(::GetDesktopWindow());
-	HDC memDC = CreateCompatibleDC ( hDC );
+	HDC memDC = CreateCompatibleDC(hDC);
 	BITMAPINFOHEADER bmpNewInfo = {sizeof(BITMAPINFOHEADER), VISUAL_WIDTH, VISUAL_HEIGHT, 1, 24, BI_RGB, m_nStride*VISUAL_HEIGHT, 0, 0, 0, 0};
 
     void *	pData = 0;
-	m_bitmapFeatures = CreateDIBSection( memDC, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS, &pData, NULL, 0);
-	SetDIBits( memDC, m_bitmapFeatures, 0, VISUAL_HEIGHT, m_dataFeatures, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS);
+	m_bitmapFeatures = CreateDIBSection(memDC, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS, &pData, NULL, 0);
+	SetDIBits(memDC, m_bitmapFeatures, 0, VISUAL_HEIGHT, m_dataFeatures, (BITMAPINFO*)&bmpNewInfo, DIB_RGB_COLORS);
+	DeleteDC (memDC);
+	::ReleaseDC (::GetDesktopWindow(), hDC);
 }
 
 CCatalystMonitorServerDlg::~CCatalystMonitorServerDlg()
@@ -154,7 +157,7 @@ BOOL CCatalystMonitorServerDlg::OnInitDialog()
 	UpdateLocalHostIP();
 	LoadDisplayListFromFile();
 
-	SetTimer(1, 50, NULL);
+	SetTimer(1, 500, NULL);
     return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -365,6 +368,59 @@ void ThreadReceiveSendData(LPVOID param)
 	}
 }
 
+bool CCatalystMonitorServerDlg::CreateClientSocket(SOCKET& clientSocket)
+{
+	sockaddr_in clientAddress;
+	memset(&clientAddress,0,sizeof(clientAddress));
+	int addrlen = sizeof(clientAddress);
+	if((clientSocket = accept(m_socketServer, (sockaddr*)&clientAddress, &addrlen)) == INVALID_SOCKET) // return immediately for nonblocking mode
+	{        
+		//AfxMessageBox("Socket accepts client failed!", MB_ICONERROR); // No message for nonblocking socket mode
+		return false;
+	} 
+	return true;
+}
+
+bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
+{
+    int exist = -1;
+    for (ListClientsFeatures::iterator iterator = m_listClientsFeatures.begin(); iterator!=m_listClientsFeatures.end(); ++iterator)
+    {
+        if (stricmp(socketData.szHostName, iterator->szHostName) == 0)
+        {
+            for (int i=0; i<FEATURECOUNT; i++)
+            {
+                if (socketData.featureChanges[i].nChanged > 0)
+                    iterator->featureChanges[i].nChanged++;
+            }
+            exist++;
+			break;
+        }
+		else
+			exist++;
+    }
+    
+    if (exist < 0) // new client
+    {
+        ClientFeatures client;
+        strcpy(client.szHostName, socketData.szHostName);
+        memcpy(client.featureChanges, socketData.featureChanges, sizeof(strFeatureChange)*FEATURECOUNT);
+        m_listClientsFeatures.push_back(client);
+
+		m_ComboBoxClient.AddString(client.szHostName);
+		if (m_ComboBoxClient.GetCount() == 1) // only one client
+		{
+			m_ComboBoxClient.SetCurSel(0);
+			exist = 0;
+		}
+    }
+
+	if (m_ComboBoxClient.GetCurSel() == exist)
+		m_updateDisplay = true;
+
+	return true;
+}
+
 void ThreadSOCKETSpeedTest(LPVOID param)
 {
 	CCatalystMonitorServerDlg* displayServer = static_cast<CCatalystMonitorServerDlg*>(param);
@@ -432,104 +488,39 @@ void ThreadSOCKETSpeedTest(LPVOID param)
 	}
 }
 
-bool CCatalystMonitorServerDlg::CreateClientSocket(SOCKET& clientSocket)
+bool CCatalystMonitorServerDlg::LoadDisplayListFromFile()
 {
-	sockaddr_in clientAddress;
-	memset(&clientAddress,0,sizeof(clientAddress));
-	int addrlen = sizeof(clientAddress);
-	if((clientSocket = accept(m_socketServer, (sockaddr*)&clientAddress, &addrlen)) == INVALID_SOCKET) // return immediately for nonblocking mode
-	{        
-		//AfxMessageBox("Socket accepts client failed!", MB_ICONERROR); // No message for nonblocking socket mode
+	CString strFile = GetModulePath();
+	strFile.Append(s_szDisplayList);
+	FILE* file = fopen(strFile, "r");
+	if (file == NULL)
 		return false;
-	} 
-	return true;
-}
 
-void CCatalystMonitorServerDlg::OnClose()
-{
-	OnBnClickedButtonClose();
-}
-
-void CCatalystMonitorServerDlg::OnBnClickedButtonClose()
-{
-	if (m_hThread)
+	char szFlag[256] = "";
+	fgets(szFlag, 256, file);
+	if (strstr(szFlag, s_szVPPFlag) != szFlag)
 	{
-		m_bTerminateThread = true;
-		WaitForSingleObject(m_hThread, 2000); //INFINITE
-		CloseHandle(m_hThread);
+		fclose(file);
+		return false;
 	}
-	OnOK();
-}
 
-bool CCatalystMonitorServerDlg::AddOneSetting(SocketFeatureData socketData)
-{
-    bool exist = false;
-    for (ListClientsFeatures::iterator iterator = m_listClientsFeatures.begin(); iterator!=m_listClientsFeatures.end(); ++iterator)
-    {
-        if (stricmp(socketData.szHostName, iterator->szHostName) == 0)
-        {
-            for (int i=0; i<FEATURECOUNT; i++)
-            {
-                if (socketData.featureChanges[i].nChanged > 0)
-                    iterator->featureChanges[i].nChanged++;
-            }
-            exist = true;
-        }
-    }
-    
-    if (!exist) // new client
-    {
-        ClientFeatures client;
-        strcpy(client.szHostName, socketData.szHostName);
-        memcpy(client.featureChanges, socketData.featureChanges, sizeof(strFeatureChange)*FEATURECOUNT);
-        m_listClientsFeatures.push_back(client);
-    }
+	char szTemp[256] = "";
+	while (fgets(szTemp, sizeof(szTemp), file) != NULL)
+	{
+		if (strstr(szTemp, "Display: ") == szTemp)
+		{
 
-	CreateFeaturesDisplayData(0);
+		}
+		else if (strstr(szTemp, "Adapter: ") == szTemp)
+		{
+
+		}
+		
+		memset(szTemp, 0, sizeof(szTemp));
+	}
+
+	fclose(file);
 	return true;
-}
-
-void CCatalystMonitorServerDlg::CreateFeaturesDisplayData(int index)
-{
-	if (index >= m_listClientsFeatures.size())
-    {
-        memset(m_dataFeatures, 0, m_nStride*VISUAL_HEIGHT);
-    }
-    else
-    {
-		strFeatureChange* pFeatureData = m_listClientsFeatures[index].featureChanges;
-
-        byte* pDestR = m_dataFeatures;
-
-        for (int i=0; i<VISUAL_HEIGHT; i++)
-        {
-            for (int j=0; j<VISUAL_WIDTH; j++)
-            {
-				if (i < pFeatureData[j].nChanged)
-                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 0;
-                else
-                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 255;
-            }
-            pDestR += m_nStride;
-        }
-    }
-}
-
-void CCatalystMonitorServerDlg::DisplayFeaturesHistogram()
-{
-	CDC memDC;
-	CDC *pDC = GetDC();
-	memDC.CreateCompatibleDC( pDC);
-    
-    BITMAP bm;
-	GetObject(m_bitmapFeatures, sizeof(BITMAP), &bm);
-	memcpy(bm.bmBits, m_dataFeatures, bm.bmWidthBytes*bm.bmHeight);
-	HBITMAP pOldBmp = (HBITMAP)memDC.SelectObject(m_bitmapFeatures);
-	pDC->BitBlt(m_rectFeaturesChange.left, m_rectFeaturesChange.top, VISUAL_WIDTH, VISUAL_HEIGHT, &memDC, 0, 0,SRCCOPY);
-	memDC.SelectObject( pOldBmp);
-
-	memDC.DeleteDC();
-	ReleaseDC(pDC);
 }
 
 bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
@@ -578,41 +569,6 @@ bool CCatalystMonitorServerDlg::SaveDisplayListToFile()
 	return true;
 }
 
-bool CCatalystMonitorServerDlg::LoadDisplayListFromFile()
-{
-	CString strFile = GetModulePath();
-	strFile.Append(s_szDisplayList);
-	FILE* file = fopen(strFile, "r");
-	if (file == NULL)
-		return false;
-
-	char szFlag[256] = "";
-	fgets(szFlag, 256, file);
-	if (strstr(szFlag, s_szVPPFlag) != szFlag)
-	{
-		fclose(file);
-		return false;
-	}
-
-	char szTemp[256] = "";
-	while (fgets(szTemp, sizeof(szTemp), file) != NULL)
-	{
-		if (strstr(szTemp, "Display: ") == szTemp)
-		{
-
-		}
-		else if (strstr(szTemp, "Adapter: ") == szTemp)
-		{
-
-		}
-		
-		memset(szTemp, 0, sizeof(szTemp));
-	}
-
-	fclose(file);
-	return true;
-}
-
 bool CCatalystMonitorServerDlg::RecordService(SocketFeatureData& socketData)
 {
 	CString strFile = GetModulePath();
@@ -641,6 +597,82 @@ bool CCatalystMonitorServerDlg::RecordService(SocketFeatureData& socketData)
 	return true;
 }
 
+void CCatalystMonitorServerDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	if (m_updateDisplay)
+	{
+		CreateFeaturesDisplayData();
+		m_updateDisplay = false;
+	}
+	DisplayFeaturesHistogram();
+
+	CDialog::OnTimer(nIDEvent);
+}
+
+void CCatalystMonitorServerDlg::CreateFeaturesDisplayData()
+{
+	int index = m_ComboBoxClient.GetCurSel();
+	if (index==-1 || index >= m_listClientsFeatures.size())
+    {
+        memset(m_dataFeatures, 0, m_nStride*VISUAL_HEIGHT);
+    }
+    else
+    {
+		strFeatureChange* pFeatureData = m_listClientsFeatures[index].featureChanges;
+
+        byte* pDestR = m_dataFeatures;
+        for (int i=0; i<VISUAL_HEIGHT; i++)
+        {
+            for (int j=0; j<VISUAL_WIDTH; j++)
+            {
+				if (i < pFeatureData[j].nChanged)
+                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 0;
+                else
+                    pDestR[3*j] = pDestR[3*j+1] = pDestR[3*j+2] = 255;
+            }
+            pDestR += m_nStride;
+        }
+    }
+}
+
+void CCatalystMonitorServerDlg::DisplayFeaturesHistogram()
+{
+	CDC memDC;
+	CDC *pDC = GetDC();
+	memDC.CreateCompatibleDC( pDC);
+    
+    BITMAP bm;
+	GetObject(m_bitmapFeatures, sizeof(BITMAP), &bm);
+	memcpy(bm.bmBits, m_dataFeatures, bm.bmWidthBytes*bm.bmHeight);
+	HBITMAP pOldBmp = (HBITMAP)memDC.SelectObject(m_bitmapFeatures);
+	pDC->BitBlt(m_rectFeaturesChange.left, m_rectFeaturesChange.top, VISUAL_WIDTH, VISUAL_HEIGHT, &memDC, 0, 0,SRCCOPY);
+	memDC.SelectObject( pOldBmp);
+
+	memDC.DeleteDC();
+	ReleaseDC(pDC);
+}
+
+void CCatalystMonitorServerDlg::OnCbnSelchangeComboClient()
+{
+	CreateFeaturesDisplayData();
+}
+
+void CCatalystMonitorServerDlg::OnClose()
+{
+	OnBnClickedButtonClose();
+}
+
+void CCatalystMonitorServerDlg::OnBnClickedButtonClose()
+{
+	if (m_hThread)
+	{
+		m_bTerminateThread = true;
+		WaitForSingleObject(m_hThread, 2000); //INFINITE
+		CloseHandle(m_hThread);
+	}
+	OnOK();
+}
+
 CString CCatalystMonitorServerDlg::GetModulePath()
 {
 	char szTemp[512] = "";
@@ -655,17 +687,4 @@ CString CCatalystMonitorServerDlg::GetModulePath()
 	CString strTemp;
 	strTemp.Format("%s%s", szDrive, dir);
 	return strTemp;
-}
-
-void CCatalystMonitorServerDlg::OnCbnSelchangeComboClient()
-{
-    return;
-}
-
-void CCatalystMonitorServerDlg::OnTimer(UINT_PTR nIDEvent)
-{
-	//TODO: sync with generating visualization thread
-	DisplayFeaturesHistogram();
-
-	CDialog::OnTimer(nIDEvent);
 }

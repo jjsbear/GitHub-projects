@@ -28,13 +28,14 @@ public:
 	bool CreateClientSocket(SOCKET& clientSocket);
 	bool AddOneSetting(SocketFeatureData socketData);
 	bool RecordService(SocketFeatureData& socketData);
-	void CreateFeaturesDisplayData(int index);
+	void CreateFeaturesDisplayData();
 	void DisplayFeaturesHistogram();
 
 private:
 	HANDLE m_hThread;
 	SOCKET m_socketServer;
 
+	bool    m_updateDisplay;
 	int     m_nStride;
 	byte*   m_dataFeatures;
     HBITMAP m_bitmapFeatures;
